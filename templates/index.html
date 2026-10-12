@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meet Sync</title>
+<style>
+:root{--bg:#0f1117;--card:#181b24;--ink:#e8eaf0;--mut:#8b91a3;--acc:#ff5d8f;--ok:#4ade80;--line:#2a2f3d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+header{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+h1{margin:0;font-size:20px}h1 span{color:var(--acc)}nav{display:flex;gap:6px;margin-left:auto}
+button{background:var(--card);color:var(--ink);border:1px solid var(--line);padding:8px 14px;border-radius:8px;cursor:pointer;font:inherit}
+button.on,button.p{background:var(--acc);border-color:var(--acc);color:#fff}button:hover{filter:brightness(1.15)}
+main{max-width:1100px;margin:0 auto;padding:24px}.hide{display:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+input,textarea{width:100%;background:#0f1117;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px;font:inherit;margin:4px 0 12px}
+label{font-size:13px;color:var(--mut)}.tag{display:inline-block;background:#262b3a;border-radius:99px;padding:2px 10px;margin:2px 4px 2px 0;font-size:12px}
+.mut{color:var(--mut);font-size:13px}.err{color:#ff7a7a;margin:8px 0}.bar{height:6px;border-radius:4px;background:#262b3a;overflow:hidden}.bar i{display:block;height:100%;background:var(--ok)}
+.bubble{padding:8px 12px;border-radius:12px;margin:6px 0;max-width:80%;background:#262b3a}.bubble.r{margin-left:auto;background:#3a2233}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.chk{display:flex;gap:8px;align-items:flex-start;margin:6px 0 14px}.chk input{width:auto;margin:4px 0 0}
+select{background:#0f1117;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px}
+</style></head><body>
+<header><h1>Meet <span>Sync</span></h1>
+<nav id="nav"><button data-t="add" class="on">1 · Add person</button><button data-t="profiles">2 · Profiles</button><button data-t="dates">3 · Dates</button><button data-t="ranks">4 · Rankings</button></nav></header>
+<main>
+<section id="add">
+ <div class="row" style="margin-bottom:14px"><div class="mut">Opt-in only. Each person pastes <b>their own</b> links and text. The agent reads nothing else.</div>
+ <button class="p" onclick="loadDemo()">Load 25 demo personas</button></div>
+ <div class="card"><label>Name</label><input id="name">
+ <label>LinkedIn link (yours)</label><input id="li" placeholder="https://www.linkedin.com/in/your-handle">
+ <label>Instagram link (yours, public)</label><input id="ig" placeholder="https://www.instagram.com/your_handle">
+ <label>LinkedIn About / headline (paste text)</label><textarea id="lit" rows="4"></textarea>
+ <label>Instagram bio / a few captions (paste text)</label><textarea id="igt" rows="4"></textarea>
+ <div class="chk"><input type="checkbox" id="consent"><label for="consent" style="color:var(--ink)">I confirm these profiles are mine, I consent to the agent analysing the text I supplied, and I can delete my profile at any time.</label></div>
+ <button class="p" onclick="addP()">Create my agent</button><div id="err" class="err"></div></div>
+</section>
+<section id="profiles" class="hide"><div id="pgrid" class="grid"></div></section>
+<section id="dates" class="hide">
+ <div class="row card" style="margin-bottom:14px"><div><b id="dcount">0</b> dates run</div>
+ <div><label><input type="checkbox" id="llm" style="width:auto;margin:0 6px 0 0">Use LLM for dialogue (needs GROQ_API_KEY or ANTHROPIC_API_KEY; offline otherwise)</label> <button class="p" onclick="runAll()" id="runbtn">Run all dates</button></div></div>
+ <div class="row" style="margin-bottom:12px"><select id="sa" onchange="showDate()"></select><span>×</span><select id="sb" onchange="showDate()"></select></div>
+ <div id="dview" class="card mut">Pick two people (after running dates).</div>
+</section>
+<section id="ranks" class="hide"><div class="row" style="margin-bottom:12px"><select id="rp" onchange="showRank()"></select><span class="mut">Ranked by simulated-date compatibility</span></div><div id="rview"></div></section>
+</main>
+<script>
+let S={people:[],dates:[],rankings:{}};const $=id=>document.getElementById(id);
+const nm=id=>(S.people.find(p=>p.id===id)||{}).name||id;
+document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>tab(b.dataset.t));
+function tab(t){['add','profiles','dates','ranks'].forEach(x=>$(x).classList.toggle('hide',x!==t));
+ document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));}
+async function api(u,m='GET',b){const r=await fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+ const j=await r.json();if(!r.ok)throw new Error(j.error||'Error');return j;}
+async function load(){S=await api('/api/state');render();}
+async function addP(){$('err').textContent='';try{await api('/api/people','POST',{name:$('name').value,linkedin_url:$('li').value,instagram_url:$('ig').value,
+ linkedin_text:$('lit').value,instagram_text:$('igt').value,consent:$('consent').checked});await load();tab('profiles');}catch(e){$('err').textContent=e.message}}
+async function loadDemo(){S=await api('/api/demo','POST');render();tab('profiles');}
+async function del(id){await api('/api/people/'+id,'DELETE');load();}
+async function runAll(){$('runbtn').textContent='Running…';try{S=await api('/api/run','POST',{use_llm:$('llm').checked});render();tab('dates');}catch(e){alert(e.message)}$('runbtn').textContent='Run all dates';}
+const tags=a=>(a||[]).map(x=>`<span class="tag">${x}</span>`).join('');
+function render(){
+ $('pgrid').innerHTML=S.people.map(p=>`<div class="card"><div class="row"><b>${p.name}</b><button onclick="del('${p.id}')">Delete</button></div>
+ <div class="mut">${p.synthetic?'Synthetic demo persona':'Opt-in participant'} · ${p.profile.city}</div><p>${p.profile.summary}</p>
+ <div class="mut">Interests</div>${tags(p.profile.interests)}<div class="mut">Hobbies</div>${tags(p.profile.hobbies)}
+ <div class="mut">Values</div>${tags(p.profile.values)}<div class="mut">Needs</div><ul>${p.profile.needs.map(n=>`<li>${n}</li>`).join('')}</ul>
+ <div class="mut">Style: ${p.profile.social_style} · Career drive: ${p.profile.career_signal}</div>
+ <div class="mut"><a style="color:var(--acc)" href="${p.linkedin_url}" target="_blank" rel="noopener">LinkedIn</a> · <a style="color:var(--acc)" href="${p.instagram_url}" target="_blank" rel="noopener">Instagram</a></div></div>`).join('')||'<div class="mut">No people yet.</div>';
+ const opts=S.people.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+ const sa=$('sa').value,sb=$('sb').value,rp=$('rp').value;$('sa').innerHTML=opts;$('sb').innerHTML=opts;$('rp').innerHTML=opts;
+ if(sa)$('sa').value=sa;if(sb)$('sb').value=sb;else if(S.people[1])$('sb').value=S.people[1].id;if(rp)$('rp').value=rp;
+ $('dcount').textContent=S.dates.length;showDate();showRank();}
+function showDate(){const a=$('sa').value,b=$('sb').value;const d=S.dates.find(x=>(x.a===a&&x.b===b)||(x.a===b&&x.b===a));
+ $('dview').innerHTML=!S.dates.length?'Run all dates first.':!d?'Pick two different people.':
+ `<div class="row"><b>${nm(d.a)} × ${nm(d.b)}</b><span>Compatibility ${d.score}/100 · ${d.mode}</span></div><div class="bar"><i style="width:${d.score}%"></i></div>`+
+ d.transcript.map(t=>`<div class="bubble ${t.speaker===nm(d.b)?'r':''}"><div class="mut">${t.speaker}'s agent</div>${t.text}</div>`).join('');}
+function showRank(){const id=$('rp').value,r=S.rankings[id];
+ $('rview').innerHTML=!r?'<div class="mut">Run all dates first.</div>':r.map((x,i)=>{const o=S.people.find(p=>p.id===x.id),me=S.people.find(p=>p.id===id);
+ const sh=o?me.profile.interests.filter(v=>o.profile.interests.includes(v)):[];
+ return `<div class="card" style="margin-bottom:8px"><div class="row"><b>#${i+1} ${nm(x.id)}</b><span>${x.score}/100</span></div><div class="bar"><i style="width:${x.score}%"></i></div>
+ <div class="mut">Shared: ${sh.join(', ')||'none'} · <a href="#" style="color:var(--acc)" onclick="$('sa').value='${id}';$('sb').value='${x.id}';showDate();tab('dates');return false">view date</a></div></div>`}).join('');}
+load();
+</script></body></html>
