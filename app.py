@@ -2,7 +2,7 @@ import re, uuid
 from flask import Flask, jsonify, request, render_template
 try:
     from dotenv import load_dotenv
-    load_dotenv()  # reads GROQ_API_KEY from a local .env file (never committed)
+    load_dotenv()  
 except ImportError:
     pass
 import agents
